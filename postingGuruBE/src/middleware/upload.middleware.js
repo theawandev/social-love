@@ -1,9 +1,11 @@
-// backend/src/middleware/upload.middleware.js
 const multer = require('multer');
 const path = require('path');
-const sharp = require('sharp');
 const fs = require('fs').promises;
 const { FILE_LIMITS } = require('../utils/constants');
+const { sanitizeFilename, formatFileSize } = require('../utils/helpers');
+const { generateThumbnail } = require('../utils/file-converter');
+const { validateFileType, validateFileSize } = require('../utils/validator');
+const logger = require('../utils/logger');
 
 // Storage configuration
 const storage = multer.diskStorage({
@@ -13,35 +15,34 @@ const storage = multer.diskStorage({
       await fs.mkdir(uploadPath, { recursive: true });
       cb(null, uploadPath);
     } catch (error) {
+      logger.error('Upload directory creation failed', { error: error.message });
       cb(error);
     }
   },
   filename: (req, file, cb) => {
-    // Generate unique filename
+    // Generate unique filename using utility
+    const sanitizedName = sanitizeFilename(file.originalname);
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const ext = path.extname(file.originalname).toLowerCase();
-    cb(null, `${file.fieldname}-${uniqueSuffix}${ext}`);
+    const ext = path.extname(sanitizedName).toLowerCase();
+    const baseName = path.basename(sanitizedName, ext);
+    cb(null, `${baseName}-${uniqueSuffix}${ext}`);
   }
 });
 
-// File filter
+// File filter using utility functions
 const fileFilter = (req, file, cb) => {
-  const allowedTypes = {
-    'image/jpeg': true,
-    'image/jpg': true,
-    'image/png': true,
-    'image/gif': true,
-    'video/mp4': true,
-    'video/mov': true,
-    'video/avi': true,
-    'video/wmv': true,
-    'video/flv': true,
-    'video/webm': true,
-  };
+  const allowedTypes = [
+    'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp',
+    'video/mp4', 'video/mov', 'video/avi', 'video/wmv', 'video/flv', 'video/webm'
+  ];
 
-  if (allowedTypes[file.mimetype]) {
+  if (validateFileType(file.mimetype, allowedTypes)) {
     cb(null, true);
   } else {
+    logger.warn('Invalid file type attempted', {
+      mimetype: file.mimetype,
+      originalName: file.originalname
+    });
     cb(new Error('Invalid file type. Only images and videos are allowed.'), false);
   }
 };
@@ -64,64 +65,48 @@ const processFiles = async (req, res, next) => {
 
   try {
     for (const file of req.files) {
-      // Generate thumbnail for videos and large images
-      if (file.mimetype.startsWith('image/')) {
-        await generateImageThumbnail(file);
-      } else if (file.mimetype.startsWith('video/')) {
-        await generateVideoThumbnail(file);
+      // Validate file size using utility
+      if (!validateFileSize(file.size, 100 * 1024 * 1024)) {
+        throw new Error(`File ${file.originalname} is too large`);
       }
 
-      // Validate file size based on platform requirements
-      // This would be implemented based on target platforms
-      // For now, we'll use general limits
+      logger.info('Processing uploaded file', {
+        originalName: file.originalname,
+        filename: file.filename,
+        size: formatFileSize(file.size),
+        mimetype: file.mimetype
+      });
+
+      // Generate thumbnail for images
+      if (file.mimetype.startsWith('image/')) {
+        try {
+          await generateThumbnail(file.path);
+        } catch (thumbnailError) {
+          logger.warn('Thumbnail generation failed', {
+            filename: file.filename,
+            error: thumbnailError.message
+          });
+        }
+      }
     }
 
     next();
   } catch (error) {
-    console.error('File processing error:', error);
+    logger.error('File processing error', { error: error.message });
+
     // Clean up uploaded files on error
-    for (const file of req.files) {
+    for (const file of req.files || []) {
       try {
         await fs.unlink(file.path);
-        if (file.thumbnailPath) {
-          await fs.unlink(file.thumbnailPath);
-        }
       } catch (cleanupError) {
-        console.error('File cleanup error:', cleanupError);
+        logger.error('File cleanup error', {
+          filename: file.filename,
+          error: cleanupError.message
+        });
       }
     }
+
     res.status(500).json({ error: 'File processing failed' });
-  }
-};
-
-// Generate image thumbnail
-const generateImageThumbnail = async (file) => {
-  try {
-    const thumbnailDir = path.join(path.dirname(file.path), 'thumbnails');
-    await fs.mkdir(thumbnailDir, { recursive: true });
-
-    const thumbnailPath = path.join(thumbnailDir, `thumb_${file.filename}`);
-
-    await sharp(file.path)
-      .resize(300, 300, { fit: 'cover' })
-      .jpeg({ quality: 80 })
-      .toFile(thumbnailPath);
-
-    file.thumbnailPath = thumbnailPath;
-  } catch (error) {
-    console.error('Thumbnail generation error:', error);
-    // Don't throw error, thumbnails are optional
-  }
-};
-
-// Generate video thumbnail (placeholder - would need ffmpeg)
-const generateVideoThumbnail = async (file) => {
-  try {
-    // This would require ffmpeg to extract frame from video
-    // For now, we'll skip video thumbnails
-    console.log('Video thumbnail generation not implemented yet');
-  } catch (error) {
-    console.error('Video thumbnail generation error:', error);
   }
 };
 

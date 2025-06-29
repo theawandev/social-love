@@ -1,15 +1,18 @@
-// backend/src/services/file-upload.service.js
 const multer = require('multer');
 const sharp = require('sharp');
 const path = require('path');
 const fs = require('fs').promises;
 const { FILE_LIMITS } = require('../utils/constants');
+const { formatFileSize, sanitizeFilename, isImage, isVideo } = require('../utils/helpers');
+const { convertImageFormat, resizeImage, optimizeImage, generateThumbnail } = require('../utils/file-converter');
+const logger = require('../utils/logger');
 
 const uploadProfileImage = async (file) => {
   try {
     const uploadDir = path.join(__dirname, '../../uploads/profiles');
     await fs.mkdir(uploadDir, { recursive: true });
 
+    const sanitizedOriginalName = sanitizeFilename(file.originalname);
     const filename = `profile_${Date.now()}_${Math.round(Math.random() * 1E9)}.jpg`;
     const outputPath = path.join(uploadDir, filename);
 
@@ -22,9 +25,15 @@ const uploadProfileImage = async (file) => {
     // Delete original file
     await fs.unlink(file.path);
 
+    logger.info('Profile image processed', {
+      originalName: sanitizedOriginalName,
+      newFileName: filename,
+      originalSize: formatFileSize(file.size)
+    });
+
     return `/uploads/profiles/${filename}`;
   } catch (error) {
-    console.error('Profile image upload error:', error);
+    logger.error('Profile image upload error', { error: error.message });
     throw new Error('Failed to upload profile image');
   }
 };
@@ -33,49 +42,40 @@ const processUploadedFile = async (file) => {
   try {
     const { mimetype, path: filePath } = file;
 
-    if (mimetype.startsWith('image/')) {
+    logger.info('Processing uploaded file', {
+      fileName: file.filename,
+      type: mimetype,
+      size: formatFileSize(file.size)
+    });
+
+    if (isImage(file.filename)) {
       return await processImage(file);
-    } else if (mimetype.startsWith('video/')) {
+    } else if (isVideo(file.filename)) {
       return await processVideo(file);
     }
 
     return file;
   } catch (error) {
-    console.error('File processing error:', error);
+    logger.error('File processing error', { error: error.message, fileName: file.filename });
     throw error;
   }
 };
 
 const processImage = async (file) => {
   try {
-    const thumbnailDir = path.join(path.dirname(file.path), 'thumbnails');
-    await fs.mkdir(thumbnailDir, { recursive: true });
-
-    const thumbnailPath = path.join(thumbnailDir, `thumb_${file.filename}`);
-
     // Generate thumbnail
-    await sharp(file.path)
-      .resize(300, 300, { fit: 'cover' })
-      .jpeg({ quality: 80 })
-      .toFile(thumbnailPath);
+    await generateThumbnail(file.path);
 
-    file.thumbnailPath = thumbnailPath;
-
-    // Optimize original image if too large
+    // Optimize if too large
     const stats = await fs.stat(file.path);
     if (stats.size > 2 * 1024 * 1024) { // If larger than 2MB
-      await sharp(file.path)
-        .resize(1920, 1920, { fit: 'inside', withoutEnlargement: true })
-        .jpeg({ quality: 85 })
-        .toFile(file.path + '_optimized');
-
-      await fs.unlink(file.path);
-      await fs.rename(file.path + '_optimized', file.path);
+      await optimizeImage(file.path);
+      logger.info('Image optimized', { fileName: file.filename, originalSize: formatFileSize(stats.size) });
     }
 
     return file;
   } catch (error) {
-    console.error('Image processing error:', error);
+    logger.error('Image processing error', { error: error.message, fileName: file.filename });
     return file; // Return original file if processing fails
   }
 };
@@ -92,35 +92,40 @@ const processVideo = async (file) => {
       throw new Error('Video file too large');
     }
 
+    logger.info('Video validated', { fileName: file.filename, size: formatFileSize(stats.size) });
+
     return file;
   } catch (error) {
-    console.error('Video processing error:', error);
+    logger.error('Video processing error', { error: error.message, fileName: file.filename });
     throw error;
   }
 };
 
 const deleteFile = async (filename) => {
   try {
-    const filePath = path.join(__dirname, '../../uploads', filename);
-    const thumbnailPath = path.join(path.dirname(filePath), 'thumbnails', `thumb_${filename}`);
+    const sanitizedFilename = sanitizeFilename(filename);
+    const filePath = path.join(__dirname, '../../uploads', sanitizedFilename);
+    const thumbnailPath = path.join(path.dirname(filePath), 'thumbnails', `thumb_${sanitizedFilename}`);
 
     // Delete main file
     try {
       await fs.unlink(filePath);
+      logger.info('Main file deleted', { filename: sanitizedFilename });
     } catch (error) {
-      console.log('Main file not found:', filePath);
+      logger.warn('Main file not found', { filename: sanitizedFilename });
     }
 
     // Delete thumbnail if exists
     try {
       await fs.unlink(thumbnailPath);
+      logger.info('Thumbnail deleted', { filename: sanitizedFilename });
     } catch (error) {
-      console.log('Thumbnail not found:', thumbnailPath);
+      logger.warn('Thumbnail not found', { filename: sanitizedFilename });
     }
 
     return true;
   } catch (error) {
-    console.error('Delete file error:', error);
+    logger.error('Delete file error', { error: error.message, filename });
     throw new Error('Failed to delete file');
   }
 };
@@ -131,7 +136,7 @@ const validateFile = (file, platform) => {
     return { valid: true };
   }
 
-  const fileType = file.mimetype.startsWith('image/') ? 'image' : 'video';
+  const fileType = isImage(file.originalname) ? 'image' : isVideo(file.originalname) ? 'video' : 'unknown';
   const platformLimits = limits[fileType];
 
   if (!platformLimits) {
@@ -142,12 +147,12 @@ const validateFile = (file, platform) => {
   if (file.size > platformLimits.maxSize) {
     return {
       valid: false,
-      error: `File too large. Max size for ${platform} ${fileType}: ${platformLimits.maxSize / 1024 / 1024}MB`
+      error: `File too large. Max size for ${platform} ${fileType}: ${formatFileSize(platformLimits.maxSize)}`
     };
   }
 
   // Check file format
-  const fileExtension = file.originalname.split('.').pop().toLowerCase();
+  const fileExtension = path.extname(file.originalname).slice(1).toLowerCase();
   if (!platformLimits.formats.includes(fileExtension)) {
     return {
       valid: false,
@@ -165,7 +170,10 @@ const getFileInfo = async (filePath) => {
 
     return {
       size: stats.size,
+      formattedSize: formatFileSize(stats.size),
       extension,
+      isImage: isImage(filePath),
+      isVideo: isVideo(filePath),
       created: stats.birthtime,
       modified: stats.mtime
     };

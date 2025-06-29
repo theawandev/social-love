@@ -1,14 +1,28 @@
-// backend/src/controllers/post.controller.js
-const { Post, PostTarget, SocialAccount, MediaFile } = require('../models');
+const { Post, PostTarget, SocialAccount, MediaFile, sequelize } = require('../models');
 const ApiResponse = require('../utils/response');
-const { POST_STATUS } = require('../utils/constants');
+const { POST_STATUS, PLATFORMS } = require('../utils/constants');
 const schedulerService = require('../services/scheduler.service');
+const { validatePostContent, validateUUID } = require('../utils/validator');
+const { truncateText, extractHashtags, extractMentions, calculateReadingTime } = require('../utils/helpers');
+const logger = require('../utils/logger');
 
 // Create a new post
 const create = async (req, res) => {
   try {
     const { title, content, postType, scheduledAt, targetAccounts, isAiGenerated, aiPrompt } = req.body;
     const userId = req.user.id;
+
+    // Validate content using utility
+    if (!validatePostContent(content)) {
+      return res.status(400).json(ApiResponse.badRequest('Invalid post content'));
+    }
+
+    // Validate target accounts
+    for (const accountId of targetAccounts) {
+      if (!validateUUID(accountId)) {
+        return res.status(400).json(ApiResponse.badRequest('Invalid account ID format'));
+      }
+    }
 
     // Verify target accounts belong to user
     const userAccounts = await SocialAccount.findAll({
@@ -20,11 +34,17 @@ const create = async (req, res) => {
     const invalidAccounts = targetAccounts.filter(accountId => !userAccountIds.includes(accountId));
 
     if (invalidAccounts.length > 0) {
-      return res.status(400).json(ApiResponse.error('Invalid target accounts'));
+      return res.status(400).json(ApiResponse.badRequest('Invalid target accounts'));
     }
 
     // Determine post status
     const status = scheduledAt ? POST_STATUS.SCHEDULED : POST_STATUS.DRAFT;
+
+    // Extract additional metadata using utilities
+    const hashtags = extractHashtags(content);
+    const mentions = extractMentions(content);
+    const readingTime = calculateReadingTime(content);
+    const truncatedContent = truncateText(content, 100);
 
     // Create post with transaction
     const result = await sequelize.transaction(async (t) => {
@@ -88,10 +108,19 @@ const create = async (req, res) => {
       ]
     });
 
-    res.status(201).json(ApiResponse.success(completePost, 'Post created successfully', 201));
+    logger.info('Post created successfully', {
+      postId: result.id,
+      userId,
+      status,
+      hashtags: hashtags.length,
+      mentions: mentions.length,
+      readingTime
+    });
+
+    res.status(201).json(ApiResponse.created(completePost, 'Post created successfully'));
   } catch (error) {
-    console.error('Create post error:', error);
-    res.status(500).json(ApiResponse.error('Failed to create post'));
+    logger.error('Create post error', { error: error.message, userId: req.user.id });
+    res.status(500).json(ApiResponse.internalServerError('Failed to create post'));
   }
 };
 
@@ -105,8 +134,8 @@ const getPosts = async (req, res) => {
     const where = { user_id: userId };
 
     if (status) where.status = status;
-    if (startDate) where.created_at = { $gte: startDate };
-    if (endDate) where.created_at = { ...where.created_at, $lte: endDate };
+    if (startDate) where.created_at = { [sequelize.Op.gte]: startDate };
+    if (endDate) where.created_at = { ...where.created_at, [sequelize.Op.lte]: endDate };
 
     const include = [
       {
@@ -129,17 +158,29 @@ const getPosts = async (req, res) => {
       order: [['created_at', 'DESC']]
     });
 
+    // Add metadata to posts using utilities
+    const postsWithMetadata = posts.map(post => {
+      const postData = post.toJSON();
+      postData.hashtags = extractHashtags(postData.content);
+      postData.mentions = extractMentions(postData.content);
+      postData.readingTime = calculateReadingTime(postData.content);
+      postData.truncatedContent = truncateText(postData.content, 100);
+      return postData;
+    });
+
+    const hasMore = posts.length === parseInt(limit);
+
     res.json(ApiResponse.success({
-      posts,
+      posts: postsWithMetadata,
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
-        hasMore: posts.length === parseInt(limit)
+        hasMore
       }
     }));
   } catch (error) {
-    console.error('Get posts error:', error);
-    res.status(500).json(ApiResponse.error('Failed to get posts'));
+    logger.error('Get posts error', { error: error.message, userId: req.user.id });
+    res.status(500).json(ApiResponse.internalServerError('Failed to get posts'));
   }
 };
 
@@ -148,6 +189,10 @@ const getPost = async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user.id;
+
+    if (!validateUUID(id)) {
+      return res.status(400).json(ApiResponse.badRequest('Invalid post ID format'));
+    }
 
     const post = await Post.findOne({
       where: { id, user_id: userId },
@@ -172,10 +217,16 @@ const getPost = async (req, res) => {
       return res.status(404).json(ApiResponse.notFound('Post not found'));
     }
 
-    res.json(ApiResponse.success(post));
+    // Add metadata using utilities
+    const postData = post.toJSON();
+    postData.hashtags = extractHashtags(postData.content);
+    postData.mentions = extractMentions(postData.content);
+    postData.readingTime = calculateReadingTime(postData.content);
+
+    res.json(ApiResponse.success(postData));
   } catch (error) {
-    console.error('Get post error:', error);
-    res.status(500).json(ApiResponse.error('Failed to get post'));
+    logger.error('Get post error', { error: error.message, postId: req.params.id });
+    res.status(500).json(ApiResponse.internalServerError('Failed to get post'));
   }
 };
 
@@ -186,6 +237,15 @@ const updatePost = async (req, res) => {
     const userId = req.user.id;
     const updateData = req.body;
 
+    if (!validateUUID(id)) {
+      return res.status(400).json(ApiResponse.badRequest('Invalid post ID format'));
+    }
+
+    // Validate content if being updated
+    if (updateData.content && !validatePostContent(updateData.content)) {
+      return res.status(400).json(ApiResponse.badRequest('Invalid post content'));
+    }
+
     const post = await Post.findOne({
       where: { id, user_id: userId }
     });
@@ -195,7 +255,7 @@ const updatePost = async (req, res) => {
     }
 
     if (post.status === POST_STATUS.PUBLISHED) {
-      return res.status(400).json(ApiResponse.error('Cannot update published posts'));
+      return res.status(400).json(ApiResponse.badRequest('Cannot update published posts'));
     }
 
     const updatedPost = await post.update(updateData);
@@ -205,10 +265,12 @@ const updatePost = async (req, res) => {
       await schedulerService.reschedulePost(id, new Date(updateData.scheduled_at));
     }
 
+    logger.info('Post updated successfully', { postId: id, userId });
+
     res.json(ApiResponse.success(updatedPost, 'Post updated successfully'));
   } catch (error) {
-    console.error('Update post error:', error);
-    res.status(500).json(ApiResponse.error('Failed to update post'));
+    logger.error('Update post error', { error: error.message, postId: req.params.id });
+    res.status(500).json(ApiResponse.internalServerError('Failed to update post'));
   }
 };
 
@@ -217,6 +279,10 @@ const deletePost = async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user.id;
+
+    if (!validateUUID(id)) {
+      return res.status(400).json(ApiResponse.badRequest('Invalid post ID format'));
+    }
 
     const post = await Post.findOne({
       where: { id, user_id: userId }
@@ -233,10 +299,12 @@ const deletePost = async (req, res) => {
 
     await post.destroy();
 
+    logger.info('Post deleted successfully', { postId: id, userId });
+
     res.json(ApiResponse.success(null, 'Post deleted successfully'));
   } catch (error) {
-    console.error('Delete post error:', error);
-    res.status(500).json(ApiResponse.error('Failed to delete post'));
+    logger.error('Delete post error', { error: error.message, postId: req.params.id });
+    res.status(500).json(ApiResponse.internalServerError('Failed to delete post'));
   }
 };
 
@@ -245,6 +313,10 @@ const duplicatePost = async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user.id;
+
+    if (!validateUUID(id)) {
+      return res.status(400).json(ApiResponse.badRequest('Invalid post ID format'));
+    }
 
     const originalPost = await Post.findOne({
       where: { id, user_id: userId },
@@ -276,10 +348,12 @@ const duplicatePost = async (req, res) => {
       await PostTarget.bulkCreate(targetData);
     }
 
-    res.status(201).json(ApiResponse.success(duplicatedPost, 'Post duplicated successfully', 201));
+    logger.info('Post duplicated successfully', { originalPostId: id, newPostId: duplicatedPost.id, userId });
+
+    res.status(201).json(ApiResponse.created(duplicatedPost, 'Post duplicated successfully'));
   } catch (error) {
-    console.error('Duplicate post error:', error);
-    res.status(500).json(ApiResponse.error('Failed to duplicate post'));
+    logger.error('Duplicate post error', { error: error.message, postId: req.params.id });
+    res.status(500).json(ApiResponse.internalServerError('Failed to duplicate post'));
   }
 };
 

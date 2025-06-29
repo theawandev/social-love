@@ -1,11 +1,14 @@
-// backend/src/controllers/dashboard.controller.js
 const { Post, SocialAccount, Event, PostTarget, sequelize } = require('../models');
 const ApiResponse = require('../utils/response');
+const cache = require('../utils/cache');
+const { formatNumber } = require('../utils/helpers');
+const logger = require('../utils/logger');
 
 // Get dashboard overview
 const getOverview = async (req, res) => {
   try {
     const userId = req.user.id;
+    const cacheKey = `dashboard:overview:${userId}`;
 
     // Get stats using Sequelize aggregation
     const stats = await Post.findOne({
@@ -53,13 +56,13 @@ const getOverview = async (req, res) => {
     const upcomingEvents = await Event.findAll({
       where: {
         country_code: req.user.country_code,
-        event_date: { $gte: new Date() }
+        event_date: { [sequelize.Op.gte]: new Date() }
       },
       order: [['event_date', 'ASC']],
       limit: 5
     });
 
-    res.json(ApiResponse.success({
+    const dashboardData = {
       stats: {
         scheduledPosts: parseInt(stats?.scheduledCount) || 0,
         publishedThisMonth: parseInt(stats?.publishedThisMonth) || 0,
@@ -69,11 +72,28 @@ const getOverview = async (req, res) => {
       },
       recentPosts,
       upcomingEvents,
-      socialAccounts
-    }));
+      socialAccounts,
+      formattedStats: {
+        scheduledPosts: formatNumber(parseInt(stats?.scheduledCount) || 0),
+        publishedThisMonth: formatNumber(parseInt(stats?.publishedThisMonth) || 0),
+        draftPosts: formatNumber(parseInt(stats?.draftCount) || 0),
+        failedPosts: formatNumber(parseInt(stats?.failedCount) || 0)
+      }
+    };
+
+    // Cache the result for 5 minutes
+    await cache.set(cacheKey, ApiResponse.success(dashboardData), 300);
+
+    logger.info('Dashboard overview generated', {
+      userId,
+      scheduledPosts: dashboardData.stats.scheduledPosts,
+      connectedAccounts: dashboardData.stats.connectedAccounts
+    });
+
+    res.json(ApiResponse.success(dashboardData));
   } catch (error) {
-    console.error('Dashboard overview error:', error);
-    res.status(500).json(ApiResponse.error('Failed to get dashboard overview'));
+    logger.error('Dashboard overview error', { error: error.message, userId: req.user.id });
+    res.status(500).json(ApiResponse.internalServerError('Failed to get dashboard overview'));
   }
 };
 
@@ -82,6 +102,14 @@ const getMonthlyEvents = async (req, res) => {
   try {
     const { year, month } = req.query;
     const countryCode = req.user.country_code;
+    const cacheKey = `events:monthly:${countryCode}:${year}:${month}`;
+
+    // Try cache first
+    const cachedEvents = await cache.get(cacheKey);
+    if (cachedEvents) {
+      logger.info('Monthly events served from cache', { countryCode, year, month });
+      return res.json(cachedEvents);
+    }
 
     const events = await Event.findAll({
       where: {
@@ -94,10 +122,17 @@ const getMonthlyEvents = async (req, res) => {
       order: [['event_date', 'ASC']]
     });
 
-    res.json(ApiResponse.success(events));
+    const responseData = ApiResponse.success(events);
+
+    // Cache for 1 day (events don't change frequently)
+    await cache.set(cacheKey, responseData, 86400);
+
+    logger.info('Monthly events generated', { countryCode, year, month, count: events.length });
+
+    res.json(responseData);
   } catch (error) {
-    console.error('Get monthly events error:', error);
-    res.status(500).json(ApiResponse.error('Failed to get monthly events'));
+    logger.error('Get monthly events error', { error: error.message, query: req.query });
+    res.status(500).json(ApiResponse.internalServerError('Failed to get monthly events'));
   }
 };
 

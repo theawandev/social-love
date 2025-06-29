@@ -2,47 +2,60 @@
 const jwt = require('jsonwebtoken');
 const { User } = require('../models');
 const ApiResponse = require('../utils/response');
+const authService = require('../services/auth.service');
+const notificationService = require('../services/notification.service');
+const { validateEmail, validatePassword, validateUsername } = require('../utils/validator');
+const { maskSensitiveData } = require('../utils/helpers');
+const logger = require('../utils/logger');
 
 // Register new user
 const register = async (req, res) => {
   try {
     const { username, email, password, firstName, lastName } = req.body;
 
-    // Check if user already exists
-    const existingUser = await User.findOne({
-      where: {
-        $or: [{ username }, { email }],
-        is_active: true
-      }
-    });
+    // Additional validation using utilities
+    if (!validateEmail(email)) {
+      return res.status(400).json(ApiResponse.badRequest('Invalid email format'));
+    }
 
-    if (existingUser) {
-      return res.status(400).json(ApiResponse.error('Username or email already exists', 400));
+    if (!validateUsername(username)) {
+      return res.status(400).json(ApiResponse.badRequest('Invalid username format'));
+    }
+
+    if (!validatePassword(password)) {
+      return res.status(400).json(ApiResponse.badRequest('Password must be at least 6 characters with uppercase, lowercase, and number'));
+    }
+
+    // Check if user already exists
+    const userExists = await authService.checkUserExists(username, email);
+    if (userExists) {
+      return res.status(400).json(ApiResponse.conflict('Username or email already exists'));
     }
 
     // Create user
-    const user = await User.create({
+    const user = await authService.createUser({
       username,
       email,
-      password_hash: password, // Will be hashed by hook
-      first_name: firstName,
-      last_name: lastName
+      password,
+      firstName,
+      lastName
     });
 
     // Generate JWT token
-    const token = jwt.sign(
-      { userId: user.id, email: user.email },
-      process.env.JWT_SECRET || 'your-super-secret-jwt-key',
-      { expiresIn: '7d' }
-    );
+    const token = authService.generateToken(user.id, user.email);
 
-    res.status(201).json(ApiResponse.success({
+    // Send welcome email
+    await notificationService.sendWelcomeEmail(user);
+
+    logger.info('User registered successfully', { userId: user.id, email: maskSensitiveData({ email }).email });
+
+    res.status(201).json(ApiResponse.created({
       user,
       token
-    }, 'User registered successfully', 201));
+    }, 'User registered successfully'));
   } catch (error) {
-    console.error('Registration error:', error);
-    res.status(500).json(ApiResponse.error('Registration failed'));
+    logger.error('Registration error', { error: error.message, stack: error.stack });
+    res.status(500).json(ApiResponse.internalServerError('Registration failed'));
   }
 };
 
@@ -52,10 +65,7 @@ const login = async (req, res) => {
     const { email, password } = req.body;
 
     // Find user by email
-    const user = await User.findOne({
-      where: { email, is_active: true }
-    });
-
+    const user = await authService.findUserByEmail(email);
     if (!user) {
       return res.status(401).json(ApiResponse.unauthorized('Invalid credentials'));
     }
@@ -67,19 +77,17 @@ const login = async (req, res) => {
     }
 
     // Generate JWT token
-    const token = jwt.sign(
-      { userId: user.id, email: user.email },
-      process.env.JWT_SECRET || 'your-super-secret-jwt-key',
-      { expiresIn: '7d' }
-    );
+    const token = authService.generateToken(user.id, user.email);
+
+    logger.info('User login successful', { userId: user.id });
 
     res.json(ApiResponse.success({
       user,
       token
     }, 'Login successful'));
   } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json(ApiResponse.error('Login failed'));
+    logger.error('Login error', { error: error.message });
+    res.status(500).json(ApiResponse.internalServerError('Login failed'));
   }
 };
 
@@ -89,17 +97,15 @@ const googleCallback = async (req, res) => {
     const user = req.user;
 
     // Generate JWT token
-    const token = jwt.sign(
-      { userId: user.id, email: user.email },
-      process.env.JWT_SECRET || 'your-super-secret-jwt-key',
-      { expiresIn: '7d' }
-    );
+    const token = authService.generateToken(user.id, user.email);
+
+    logger.info('Google OAuth successful', { userId: user.id });
 
     // Redirect to frontend with token
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
     res.redirect(`${frontendUrl}/auth/callback?token=${token}`);
   } catch (error) {
-    console.error('Google callback error:', error);
+    logger.error('Google callback error', { error: error.message });
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
     res.redirect(`${frontendUrl}/auth/error`);
   }
@@ -111,8 +117,8 @@ const getProfile = async (req, res) => {
     const user = req.user;
     res.json(ApiResponse.success(user));
   } catch (error) {
-    console.error('Get profile error:', error);
-    res.status(500).json(ApiResponse.error('Failed to get profile'));
+    logger.error('Get profile error', { error: error.message });
+    res.status(500).json(ApiResponse.internalServerError('Failed to get profile'));
   }
 };
 
@@ -123,10 +129,13 @@ const completeTour = async (req, res) => {
       { tour_completed: true },
       { where: { id: req.user.id } }
     );
+
+    logger.info('Tour completed', { userId: req.user.id });
+
     res.json(ApiResponse.success({ tourCompleted: true }, 'Tour completed successfully'));
   } catch (error) {
-    console.error('Complete tour error:', error);
-    res.status(500).json(ApiResponse.error('Failed to complete tour'));
+    logger.error('Complete tour error', { error: error.message });
+    res.status(500).json(ApiResponse.internalServerError('Failed to complete tour'));
   }
 };
 
@@ -137,4 +146,3 @@ module.exports = {
   getProfile,
   completeTour
 };
-

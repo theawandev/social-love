@@ -1,44 +1,54 @@
-// backend/src/services/scheduler.service.js
 const { addPostPublishJob, cancelPostPublishJob } = require('../jobs/queue');
 const { Post } = require('../models');
 const logger = require('../utils/logger');
+const { formatDateForDisplay } = require('../utils/timezone');
+const { retry } = require('../utils/helpers');
 
 const schedulePost = async (postId, scheduledAt) => {
   try {
-    logger.info(`Scheduling post ${postId} for ${scheduledAt.toISOString()}`);
+    const formattedDate = formatDateForDisplay(scheduledAt);
+    logger.info('Scheduling post', { postId, scheduledAt: formattedDate });
 
-    const job = await addPostPublishJob(postId, scheduledAt);
+    // Use retry utility for robustness
+    const job = await retry(async () => {
+      return await addPostPublishJob(postId, scheduledAt);
+    }, 3, 1000);
 
-    logger.info(`Post ${postId} scheduled successfully with job ID: ${job.id}`);
+    logger.info('Post scheduled successfully', { postId, jobId: job.id, scheduledAt: formattedDate });
     return job.id;
   } catch (error) {
-    logger.error('Schedule post error:', { postId, scheduledAt, error: error.message });
+    logger.error('Schedule post error', {
+      postId,
+      scheduledAt: scheduledAt?.toISOString(),
+      error: error.message
+    });
     throw error;
   }
 };
 
 const cancelPost = async (postId) => {
   try {
-    logger.info(`Cancelling scheduled post ${postId}`);
+    logger.info('Cancelling scheduled post', { postId });
 
     const cancelled = await cancelPostPublishJob(postId);
 
     if (cancelled) {
-      logger.info(`Successfully cancelled scheduled post ${postId}`);
+      logger.info('Successfully cancelled scheduled post', { postId });
     } else {
-      logger.warn(`No scheduled job found for post ${postId}`);
+      logger.warn('No scheduled job found for post', { postId });
     }
 
     return cancelled;
   } catch (error) {
-    logger.error('Cancel post error:', { postId, error: error.message });
+    logger.error('Cancel post error', { postId, error: error.message });
     throw error;
   }
 };
 
 const reschedulePost = async (postId, newScheduledAt) => {
   try {
-    logger.info(`Rescheduling post ${postId} to ${newScheduledAt.toISOString()}`);
+    const formattedDate = formatDateForDisplay(newScheduledAt);
+    logger.info('Rescheduling post', { postId, newScheduledAt: formattedDate });
 
     // Cancel existing job
     await cancelPost(postId);
@@ -46,10 +56,14 @@ const reschedulePost = async (postId, newScheduledAt) => {
     // Schedule new job
     const jobId = await schedulePost(postId, newScheduledAt);
 
-    logger.info(`Post ${postId} rescheduled successfully with new job ID: ${jobId}`);
+    logger.info('Post rescheduled successfully', { postId, newJobId: jobId, newScheduledAt: formattedDate });
     return jobId;
   } catch (error) {
-    logger.error('Reschedule post error:', { postId, newScheduledAt, error: error.message });
+    logger.error('Reschedule post error', {
+      postId,
+      newScheduledAt: newScheduledAt?.toISOString(),
+      error: error.message
+    });
     throw error;
   }
 };
@@ -64,37 +78,43 @@ const getPostScheduleInfo = async (postId) => {
       throw new Error(`Post ${postId} not found`);
     }
 
-    return {
+    const scheduleInfo = {
       postId: post.id,
       status: post.status,
       scheduledAt: post.scheduled_at,
       publishedAt: post.published_at,
       isScheduled: post.status === 'scheduled' && post.scheduled_at,
-      canReschedule: post.status === 'scheduled' || post.status === 'draft'
+      canReschedule: post.status === 'scheduled' || post.status === 'draft',
+      formattedScheduledAt: post.scheduled_at ? formatDateForDisplay(post.scheduled_at) : null,
+      formattedPublishedAt: post.published_at ? formatDateForDisplay(post.published_at) : null
     };
+
+    logger.info('Retrieved post schedule info', { postId, status: post.status });
+
+    return scheduleInfo;
   } catch (error) {
-    logger.error('Get post schedule info error:', { postId, error: error.message });
+    logger.error('Get post schedule info error', { postId, error: error.message });
     throw error;
   }
 };
 
 const publishPostImmediately = async (postId) => {
   try {
-    logger.info(`Publishing post ${postId} immediately`);
+    logger.info('Publishing post immediately', { postId });
 
     const job = await addPostPublishJob(postId, new Date());
 
-    logger.info(`Post ${postId} queued for immediate publishing with job ID: ${job.id}`);
+    logger.info('Post queued for immediate publishing', { postId, jobId: job.id });
     return job.id;
   } catch (error) {
-    logger.error('Publish post immediately error:', { postId, error: error.message });
+    logger.error('Publish post immediately error', { postId, error: error.message });
     throw error;
   }
 };
 
 const bulkSchedulePosts = async (posts) => {
   try {
-    logger.info(`Bulk scheduling ${posts.length} posts`);
+    logger.info('Bulk scheduling posts', { count: posts.length });
 
     const results = [];
 
@@ -107,7 +127,7 @@ const bulkSchedulePosts = async (posts) => {
           jobId
         });
       } catch (error) {
-        logger.error(`Failed to schedule post ${post.id}:`, error);
+        logger.error('Failed to schedule post in bulk', { postId: post.id, error: error.message });
         results.push({
           postId: post.id,
           success: false,
@@ -117,11 +137,15 @@ const bulkSchedulePosts = async (posts) => {
     }
 
     const successCount = results.filter(r => r.success).length;
-    logger.info(`Bulk scheduling completed: ${successCount}/${posts.length} posts scheduled successfully`);
+    logger.info('Bulk scheduling completed', {
+      total: posts.length,
+      successful: successCount,
+      failed: posts.length - successCount
+    });
 
     return results;
   } catch (error) {
-    logger.error('Bulk schedule posts error:', { error: error.message });
+    logger.error('Bulk schedule posts error', { error: error.message });
     throw error;
   }
 };
@@ -141,57 +165,20 @@ const getUpcomingScheduledPosts = async (userId, limit = 10) => {
       attributes: ['id', 'title', 'content', 'scheduled_at', 'post_type']
     });
 
-    return posts.map(post => ({
+    const formattedPosts = posts.map(post => ({
       id: post.id,
       title: post.title,
-      content: post.content.substring(0, 100) + (post.content.length > 100 ? '...' : ''),
+      content: truncateText(post.content, 100),
       scheduledAt: post.scheduled_at,
+      formattedScheduledAt: formatDateForDisplay(post.scheduled_at),
       postType: post.post_type
     }));
+
+    logger.info('Retrieved upcoming scheduled posts', { userId, count: formattedPosts.length });
+
+    return formattedPosts;
   } catch (error) {
-    logger.error('Get upcoming scheduled posts error:', { userId, error: error.message });
-    throw error;
-  }
-};
-
-const calculateOptimalScheduleTime = (platform, timezone = 'UTC', targetDate = null) => {
-  const { getNextOptimalTime } = require('../utils/timezone');
-
-  try {
-    let optimalTime;
-
-    if (targetDate) {
-      // Calculate optimal time for specific date
-      const moment = require('moment-timezone');
-      const targetMoment = moment.tz(targetDate, timezone);
-
-      // Get optimal times for the platform
-      const optimalTimes = {
-        facebook: [9, 13, 15], // 9 AM, 1 PM, 3 PM
-        instagram: [11, 14, 17], // 11 AM, 2 PM, 5 PM
-        linkedin: [8, 12, 17], // 8 AM, 12 PM, 5 PM
-        tiktok: [6, 10, 19], // 6 AM, 10 AM, 7 PM
-        youtube: [14, 16, 20] // 2 PM, 4 PM, 8 PM
-      };
-
-      const times = optimalTimes[platform] || optimalTimes.facebook;
-      const closestHour = times.find(hour => hour > targetMoment.hour()) || times[0];
-
-      optimalTime = targetMoment.clone().hour(closestHour).minute(0).second(0);
-
-      // If the time is in the past, move to next day
-      if (optimalTime.isBefore(moment())) {
-        optimalTime.add(1, 'day');
-      }
-
-    } else {
-      // Get next optimal time
-      optimalTime = getNextOptimalTime(platform, timezone);
-    }
-
-    return optimalTime;
-  } catch (error) {
-    logger.error('Calculate optimal schedule time error:', { platform, timezone, targetDate, error: error.message });
+    logger.error('Get upcoming scheduled posts error', { userId, error: error.message });
     throw error;
   }
 };
@@ -203,9 +190,5 @@ module.exports = {
   getPostScheduleInfo,
   publishPostImmediately,
   bulkSchedulePosts,
-  getUpcomingScheduledPosts,
-  calculateOptimalScheduleTime
+  getUpcomingScheduledPosts
 };
-
-
-

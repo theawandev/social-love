@@ -1,4 +1,3 @@
-// backend/src/app.js (Updated with Sequelize)
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -8,9 +7,8 @@ const passport = require('./config/passport');
 const { sequelize, connectDB } = require('./config/database');
 const routes = require('./routes');
 const { errorHandler, notFoundHandler } = require('./middleware/error.middleware');
-const Queue = require('bull');
-const PostPublisherJob = require('./jobs/post-publisher.job');
-const { processMonthlyEmails } = require('./jobs/monthly-email.job');
+const logger = require('./utils/logger');
+const { formatFileSize } = require('./utils/helpers');
 require('dotenv').config();
 
 const app = express();
@@ -21,94 +19,137 @@ connectDB();
 // Sync database models (in development)
 if (process.env.NODE_ENV === 'development') {
   sequelize.sync({ alter: true }).then(() => {
-    console.log('📊 Database models synchronized');
+    logger.info('Database models synchronized');
   }).catch(error => {
-    console.error('❌ Database sync failed:', error);
+    logger.error('Database sync failed', { error: error.message });
   });
 }
 
 // Security middleware
-app.use(helmet());
-app.use(compression());
-
-// CORS configuration
-app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+app.use(helmet({
+  crossOriginEmbedderPolicy: false
+}));
+app.use(compression({
+  threshold: 1024,
+  filter: (req, res) => {
+    if (req.headers['x-no-compression']) {
+      return false;
+    }
+    return compression.filter(req, res);
+  }
 }));
 
-// Rate limiting
+// CORS configuration
+const corsOptions = {
+  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  maxAge: 86400 // 24 hours
+};
+
+app.use(cors(corsOptions));
+
+// Rate limiting with better configuration
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
-  message: 'Too many requests from this IP, please try again later.',
+  max: (req) => {
+    // Different limits for different endpoints
+    if (req.path.startsWith('/api/upload')) return 10;
+    if (req.path.startsWith('/api/ai')) return 20;
+    return 100;
+  },
+  message: (req, res) => {
+    logger.warn('Rate limit exceeded', {
+      ip: req.ip,
+      path: req.path,
+      userAgent: req.get('User-Agent')
+    });
+    return {
+      error: 'Too many requests from this IP, please try again later.',
+      retryAfter: Math.round(req.rateLimit.resetTime / 1000)
+    };
+  },
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => {
+    // Skip rate limiting for health checks
+    return req.path === '/api/health';
+  }
 });
+
 app.use('/api', limiter);
 
-// Body parsing middleware
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+// Request logging middleware
+app.use(logger.logRequest);
+
+// Body parsing middleware with size limits
+app.use(express.json({
+  limit: '10mb',
+  verify: (req, res, buf, encoding) => {
+    logger.info('JSON body received', {
+      size: formatFileSize(buf.length),
+      endpoint: req.path
+    });
+  }
+}));
+
+app.use(express.urlencoded({
+  extended: true,
+  limit: '10mb'
+}));
 
 // Passport middleware
 app.use(passport.initialize());
 
-// Static files
-app.use('/uploads', express.static('uploads'));
+// Static files with better caching
+app.use('/uploads', express.static('uploads', {
+  maxAge: '1d',
+  etag: true,
+  lastModified: true,
+  setHeaders: (res, path) => {
+    logger.info('Serving static file', { path });
+  }
+}));
+
+// Health check endpoint (before other routes)
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development',
+    version: process.env.npm_package_version || '1.0.0',
+    uptime: process.uptime()
+  });
+});
 
 // API routes
 app.use('/api', routes);
 
-// Error handling middleware
+// Error handling middleware (must be last)
 app.use(errorHandler);
 app.use(notFoundHandler);
 
-// Initialize job queues
-const postQueue = new Queue('post publishing', {
-  redis: {
-    port: process.env.REDIS_PORT || 6379,
-    host: process.env.REDIS_HOST || 'localhost',
-    password: process.env.REDIS_PASSWORD
-  }
+// Graceful shutdown handling
+process.on('SIGTERM', () => {
+  logger.info('SIGTERM received, shutting down gracefully');
+  process.exit(0);
 });
 
-const emailQueue = new Queue('email notifications', {
-  redis: {
-    port: process.env.REDIS_PORT || 6379,
-    host: process.env.REDIS_HOST || 'localhost',
-    password: process.env.REDIS_PASSWORD
-  }
+process.on('SIGINT', () => {
+  logger.info('SIGINT received, shutting down gracefully');
+  process.exit(0);
 });
 
-// Process jobs
-postQueue.process('publish-post', PostPublisherJob.process);
-emailQueue.process('monthly-events-email', processMonthlyEmails);
-
-// Queue event listeners
-postQueue.on('completed', (job, result) => {
-  console.log(`✅ Post publishing job ${ job.id } completed:`, result);
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  logger.error('Uncaught Exception', { error: error.message, stack: error.stack });
+  process.exit(1);
 });
 
-postQueue.on('failed', (job, err) => {
-  console.error(`❌ Post publishing job ${ job.id } failed:`, err);
-});
-
-emailQueue.on('completed', (job, result) => {
-  console.log(`✅ Email job ${ job.id } completed:`, result);
-});
-
-emailQueue.on('failed', (job, err) => {
-  console.error(`❌ Email job ${ job.id } failed:`, err);
-});
-
-// Schedule monthly email job (first day of every month at 9 AM)
-emailQueue.add('monthly-events-email', {}, {
-  repeat: { cron: '0 9 1 * *' },
-  removeOnComplete: 5,
-  removeOnFail: 10
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('Unhandled Rejection', { reason, promise });
+  process.exit(1);
 });
 
 module.exports = app;

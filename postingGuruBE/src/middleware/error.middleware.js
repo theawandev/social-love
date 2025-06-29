@@ -1,38 +1,46 @@
-// backend/src/middleware/error.middleware.js
 const ApiResponse = require('../utils/response');
+const logger = require('../utils/logger');
+const { maskSensitiveData } = require('../utils/helpers');
 
 // Global error handler
 const errorHandler = (err, req, res, next) => {
-  console.error('Error:', err);
+  // Log error with context
+  logger.error('Global error handler', {
+    error: err.message,
+    stack: err.stack,
+    url: req.url,
+    method: req.method,
+    userId: req.user?.id,
+    body: maskSensitiveData(req.body, ['password', 'token', 'secret'])
+  });
 
   // Sequelize validation errors
   if (err.name === 'SequelizeValidationError') {
     const errors = err.errors.map(error => ({
       field: error.path,
-      message: error.message
+      message: error.message,
+      value: error.value
     }));
     return res.status(400).json(ApiResponse.validationError(errors));
   }
 
   // Sequelize unique constraint error
   if (err.name === 'SequelizeUniqueConstraintError') {
-    return res.status(400).json(ApiResponse.error('Duplicate entry', 400));
+    const field = err.errors[0]?.path || 'field';
+    return res.status(400).json(ApiResponse.conflict(`${field} already exists`));
   }
 
   // Sequelize foreign key constraint error
   if (err.name === 'SequelizeForeignKeyConstraintError') {
-    return res.status(400).json(ApiResponse.error('Invalid reference', 400));
+    return res.status(400).json(ApiResponse.badRequest('Invalid reference'));
   }
 
   // Multer errors
-  if (err instanceof multer.MulterError) {
-    if (err.code === 'LIMIT_FILE_SIZE') {
-      return res.status(400).json(ApiResponse.error('File too large', 400));
-    }
-    if (err.code === 'LIMIT_FILE_COUNT') {
-      return res.status(400).json(ApiResponse.error('Too many files', 400));
-    }
-    return res.status(400).json(ApiResponse.error(err.message, 400));
+  if (err.code === 'LIMIT_FILE_SIZE') {
+    return res.status(400).json(ApiResponse.badRequest('File too large'));
+  }
+  if (err.code === 'LIMIT_FILE_COUNT') {
+    return res.status(400).json(ApiResponse.badRequest('Too many files'));
   }
 
   // JWT errors
@@ -44,12 +52,18 @@ const errorHandler = (err, req, res, next) => {
     return res.status(401).json(ApiResponse.unauthorized('Token expired'));
   }
 
+  // Custom business logic errors
+  if (err.name === 'ValidationError') {
+    return res.status(400).json(ApiResponse.badRequest(err.message));
+  }
+
   // Default server error
-  res.status(500).json(ApiResponse.error('Internal server error'));
+  res.status(500).json(ApiResponse.internalServerError('Internal server error'));
 };
 
 // 404 handler
 const notFoundHandler = (req, res) => {
+  logger.warn('Route not found', { url: req.url, method: req.method });
   res.status(404).json(ApiResponse.notFound('API endpoint not found'));
 };
 

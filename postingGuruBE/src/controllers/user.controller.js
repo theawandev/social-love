@@ -1,7 +1,9 @@
-// backend/src/controllers/user.controller.js
 const { User } = require('../models');
 const ApiResponse = require('../utils/response');
 const fileUploadService = require('../services/file-upload.service');
+const { validateCountryCode, validateTimezone, sanitizeString } = require('../utils/validator');
+const { formatFileSize, maskSensitiveData } = require('../utils/helpers');
+const logger = require('../utils/logger');
 
 // Update user profile
 const updateProfile = async (req, res) => {
@@ -9,15 +11,33 @@ const updateProfile = async (req, res) => {
     const userId = req.user.id;
     const { firstName, lastName, countryCode, timezone } = req.body;
 
+    // Validate input using utilities
+    if (countryCode && !validateCountryCode(countryCode)) {
+      return res.status(400).json(ApiResponse.badRequest('Invalid country code'));
+    }
+
+    if (timezone && !validateTimezone(timezone)) {
+      return res.status(400).json(ApiResponse.badRequest('Invalid timezone'));
+    }
+
+    // Sanitize strings
+    const sanitizedFirstName = sanitizeString(firstName);
+    const sanitizedLastName = sanitizeString(lastName);
+
     // Handle profile image upload if present
     let profileImage = req.user.profile_image;
     if (req.file) {
       profileImage = await fileUploadService.uploadProfileImage(req.file);
+      logger.info('Profile image uploaded', {
+        userId,
+        fileSize: formatFileSize(req.file.size),
+        fileName: req.file.filename
+      });
     }
 
-    const updatedUser = await User.update({
-      first_name: firstName,
-      last_name: lastName,
+    const [affectedCount, updatedUsers] = await User.update({
+      first_name: sanitizedFirstName,
+      last_name: sanitizedLastName,
       country_code: countryCode,
       timezone: timezone,
       profile_image: profileImage
@@ -26,13 +46,17 @@ const updateProfile = async (req, res) => {
       returning: true
     });
 
-    const user = updatedUser[1][0]; // Sequelize returns [affectedCount, affectedRows]
+    const user = updatedUsers[0];
+
+    logger.info('Profile updated successfully', {
+      userId,
+      changes: maskSensitiveData({ firstName, lastName, countryCode, timezone })
+    });
 
     res.json(ApiResponse.success(user, 'Profile updated successfully'));
-  }
-  catch (error) {
-    console.error('Update profile error:', error);
-    res.status(500).json(ApiResponse.error('Failed to update profile'));
+  } catch (error) {
+    logger.error('Update profile error', { error: error.message, userId: req.user.id });
+    res.status(500).json(ApiResponse.internalServerError('Failed to update profile'));
   }
 };
 
@@ -47,17 +71,18 @@ const changePassword = async (req, res) => {
     // Verify current password
     const isCurrentPasswordValid = await user.verifyPassword(currentPassword);
     if (!isCurrentPasswordValid) {
-      return res.status(400).json(ApiResponse.error('Current password is incorrect'));
+      return res.status(400).json(ApiResponse.badRequest('Current password is incorrect'));
     }
 
     // Update password (will be hashed by hook)
     await user.update({ password_hash: newPassword });
 
+    logger.info('Password changed successfully', { userId });
+
     res.json(ApiResponse.success(null, 'Password changed successfully'));
-  }
-  catch (error) {
-    console.error('Change password error:', error);
-    res.status(500).json(ApiResponse.error('Failed to change password'));
+  } catch (error) {
+    logger.error('Change password error', { error: error.message, userId: req.user.id });
+    res.status(500).json(ApiResponse.internalServerError('Failed to change password'));
   }
 };
 
@@ -73,18 +98,19 @@ const deleteAccount = async (req, res) => {
     if (user.password_hash) {
       const isPasswordValid = await user.verifyPassword(confirmPassword);
       if (!isPasswordValid) {
-        return res.status(400).json(ApiResponse.error('Password is incorrect'));
+        return res.status(400).json(ApiResponse.badRequest('Password is incorrect'));
       }
     }
 
     // Soft delete user
     await user.update({ is_active: false });
 
+    logger.info('Account deleted successfully', { userId });
+
     res.json(ApiResponse.success(null, 'Account deleted successfully'));
-  }
-  catch (error) {
-    console.error('Delete account error:', error);
-    res.status(500).json(ApiResponse.error('Failed to delete account'));
+  } catch (error) {
+    logger.error('Delete account error', { error: error.message, userId: req.user.id });
+    res.status(500).json(ApiResponse.internalServerError('Failed to delete account'));
   }
 };
 
@@ -104,10 +130,9 @@ const getUserStats = async (req, res) => {
     };
 
     res.json(ApiResponse.success(stats));
-  }
-  catch (error) {
-    console.error('Get user stats error:', error);
-    res.status(500).json(ApiResponse.error('Failed to get user statistics'));
+  } catch (error) {
+    logger.error('Get user stats error', { error: error.message, userId: req.user.id });
+    res.status(500).json(ApiResponse.internalServerError('Failed to get user statistics'));
   }
 };
 
