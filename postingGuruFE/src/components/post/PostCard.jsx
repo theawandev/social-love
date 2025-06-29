@@ -7,7 +7,7 @@ import PlatformIcon from '@/components/social/PlatformIcon';
 import { MoreHorizontal, Edit, Trash2, Copy, ExternalLink } from 'lucide-react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { format } from 'date-fns';
-import { truncateText } from '@/utils/formatter';
+import { truncateText } from '@/utils/formatters';
 
 const PostCard = ({ post, onEdit, onDelete, onDuplicate, onView }) => {
   return (

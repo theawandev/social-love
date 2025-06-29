@@ -1,7 +1,7 @@
 // pages/posts/Calendar.jsx
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import PostCalendar from '@/components/posts/PostCalendar';
+import PostCalendar from '@/components/post/PostCalendar';
 import Loading from '@/components/ui/Loading';
 import { postsAPI } from '@/services/posts';
 import { useLanguage } from '@/contexts/LanguageContext';

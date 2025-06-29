@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Plus, Search, Filter, Calendar } from 'lucide-react';
 import Button from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import PostCard from '@/components/posts/PostCard';
+import PostCard from '@/components/post/PostCard';
 import PostForm from '@/components/forms/PostForm';
 import EmptyState from '@/components/common/EmptyState';
 import Loading from '@/components/ui/Loading';

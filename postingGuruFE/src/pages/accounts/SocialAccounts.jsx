@@ -8,7 +8,7 @@ import SocialAccountCard from '@/components/social/SocialAccountCard';
 import ConnectAccountModal from '@/components/social/ConnectAccountModal';
 import EmptyState from '@/components/common/EmptyState';
 import Loading from '@/components/ui/Loading';
-import { socialAccountsAPI } from '@/services/socialAccounts';
+import { accountsAPI } from '@/services/accounts';
 import { useLanguage } from '@/contexts/LanguageContext';
 import toast from 'react-hot-toast';
 
@@ -20,12 +20,12 @@ const SocialAccounts = () => {
   // Fetch social accounts
   const { data: accounts = [], isLoading } = useQuery({
     queryKey: ['social-accounts'],
-    queryFn: socialAccountsAPI.getAccounts,
+    queryFn: accountsAPI.getAccounts,
   });
 
   // Connect account mutation
   const connectMutation = useMutation({
-    mutationFn: socialAccountsAPI.connectAccount,
+    mutationFn: accountsAPI.connectAccount,
     onSuccess: () => {
       queryClient.invalidateQueries(['social-accounts']);
       setShowConnectModal(false);
@@ -38,7 +38,7 @@ const SocialAccounts = () => {
 
   // Disconnect account mutation
   const disconnectMutation = useMutation({
-    mutationFn: socialAccountsAPI.disconnectAccount,
+    mutationFn: accountsAPI.disconnectAccount,
     onSuccess: () => {
       queryClient.invalidateQueries(['social-accounts']);
       toast.success(t('success.accountDisconnected'));
@@ -50,7 +50,7 @@ const SocialAccounts = () => {
 
   // Refresh account mutation
   const refreshMutation = useMutation({
-    mutationFn: socialAccountsAPI.refreshAccount,
+    mutationFn: accountsAPI.refreshAccount,
     onSuccess: () => {
       queryClient.invalidateQueries(['social-accounts']);
       toast.success('Account refreshed successfully');

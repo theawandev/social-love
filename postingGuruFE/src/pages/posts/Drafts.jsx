@@ -3,7 +3,7 @@ import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { FileEdit, Plus } from 'lucide-react';
 import Button from '@/components/ui/Button';
-import PostCard from '@/components/posts/PostCard';
+import PostCard from '@/components/post/PostCard';
 import EmptyState from '@/components/common/EmptyState';
 import Loading from '@/components/ui/Loading';
 import { postsAPI } from '@/services/posts';

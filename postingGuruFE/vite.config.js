@@ -21,6 +21,8 @@ export default defineConfig({
   },
   server: {
     port: 3000,
+    host: true, // Add this
+    open: true, // Add this to auto-open browser
     proxy: {
       '/api': {
         target: 'http://localhost:5000',
@@ -36,4 +38,15 @@ export default defineConfig({
     outDir: 'dist',
     sourcemap: true,
   },
+  optimizeDeps: {
+    include: [
+      'lodash/chunk',
+      'lodash/isEqual',
+      'lodash/findIndex',
+      'lodash/range',
+      'lodash/defaults',
+      'lodash/mapValues',
+      'lodash/omit'
+    ]
+  }
 })
