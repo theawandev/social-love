@@ -25,4 +25,5 @@ export const userAPI = {
 
   // Get user stats
   getUserStats: () => api.get('/users/stats'),
+  getProfile: () => api.get('/users/profile'),
 };

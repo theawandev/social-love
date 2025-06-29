@@ -1,4 +1,4 @@
-// src/utils/cn.js
+// utils/cn.js
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 

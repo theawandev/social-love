@@ -1,7 +1,7 @@
-// src/App.jsx
+// Updated src/App.jsx
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { Toaster } from 'react-hot-toast';
 
@@ -34,9 +34,6 @@ import { useAuth } from '@/hooks/useAuth';
 // Utils
 import { queryClient } from '@/lib/queryClient';
 
-// Styles
-import '@/styles/globals.css';
-
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
   const { isAuthenticated, isLoading } = useAuth();
@@ -52,7 +49,7 @@ const ProtectedRoute = ({ children }) => {
   return isAuthenticated ? children : <Navigate to="/login" replace />;
 };
 
-// Public Route Component (redirect to dashboard if authenticated)
+// Public Route Component
 const PublicRoute = ({ children }) => {
   const { isAuthenticated, isLoading } = useAuth();
 
@@ -72,9 +69,9 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <LanguageProvider>
-          <AuthProvider>
-            <Router>
-              <div className="App">
+          <Router>
+            <AuthProvider>
+              <div className="min-h-screen bg-background">
                 <Routes>
                   {/* Public Routes */}
                   <Route path="/login" element={
@@ -84,7 +81,6 @@ function App() {
                       </AuthLayout>
                     </PublicRoute>
                   } />
-
                   <Route path="/signup" element={
                     <PublicRoute>
                       <AuthLayout>
@@ -92,7 +88,6 @@ function App() {
                       </AuthLayout>
                     </PublicRoute>
                   } />
-
                   <Route path="/auth/callback" element={<AuthCallback />} />
 
                   {/* Protected Routes */}
@@ -175,62 +170,34 @@ function App() {
                   <Route path="*" element={
                     <div className="min-h-screen flex items-center justify-center">
                       <div className="text-center">
-                        <h1 className="text-4xl font-bold text-gray-900 dark:text-white">404</h1>
-                        <p className="text-gray-600 dark:text-gray-400 mt-2">Page not found</p>
-                        <button
-                          onClick={() => window.history.back()}
-                          className="mt-4 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
-                        >
-                          Go Back
-                        </button>
+                        <h1 className="text-4xl font-bold text-gray-900 mb-4">404</h1>
+                        <p className="text-gray-600 mb-8">Page not found</p>
+                        <a href="/" className="text-primary hover:text-primary/80">
+                          Go back home
+                        </a>
                       </div>
                     </div>
                   } />
                 </Routes>
 
-                {/* Toast Notifications */}
+                {/* Global components */}
                 <Toaster
                   position="top-right"
-                  reverseOrder={false}
-                  gutter={8}
-                  containerClassName=""
-                  containerStyle={{}}
                   toastOptions={{
-                    // Define default options
-                    className: '',
                     duration: 4000,
                     style: {
-                      background: 'hsl(var(--card))',
-                      color: 'hsl(var(--card-foreground))',
+                      background: 'hsl(var(--background))',
+                      color: 'hsl(var(--foreground))',
                       border: '1px solid hsl(var(--border))',
-                    },
-                    // Default options for specific types
-                    success: {
-                      duration: 3000,
-                      iconTheme: {
-                        primary: 'hsl(var(--success))',
-                        secondary: 'white',
-                      },
-                    },
-                    error: {
-                      duration: 5000,
-                      iconTheme: {
-                        primary: 'hsl(var(--destructive))',
-                        secondary: 'white',
-                      },
                     },
                   }}
                 />
               </div>
-            </Router>
-          </AuthProvider>
+            </AuthProvider>
+          </Router>
         </LanguageProvider>
       </ThemeProvider>
-
-      {/* React Query Devtools - only in development */}
-      {process.env.NODE_ENV === 'development' && (
-        <ReactQueryDevtools initialIsOpen={false} />
-      )}
+      <ReactQueryDevtools initialIsOpen={false} />
     </QueryClientProvider>
   );
 }

@@ -1,6 +1,6 @@
-@import 'tailwindcss/base';
-@import 'tailwindcss/components';
-@import 'tailwindcss/utilities';
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 @layer base {
   :root {
@@ -24,9 +24,6 @@
     --input: 214.3 31.8% 91.4%;
     --ring: 221.2 83.2% 53.3%;
     --radius: 0.5rem;
-    --success: 142.1 76.2% 36.3%;
-    --warning: 45.4 93.4% 47.5%;
-    --error: 0 84.2% 60.2%;
   }
 
   .dark {
@@ -49,9 +46,6 @@
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
     --ring: 224.3 76.3% 94.1%;
-    --success: 142.1 70.6% 45.3%;
-    --warning: 45.4 93.4% 47.5%;
-    --error: 0 62.8% 30.6%;
   }
 }
 
@@ -59,171 +53,65 @@
   * {
     @apply border-border;
   }
-
   body {
     @apply bg-background text-foreground;
-    font-feature-settings: "rlig" 1, "calt" 1;
-  }
-
-  h1, h2, h3, h4, h5, h6 {
-    @apply font-semibold;
-  }
-
-  /* RTL Support */
-  [dir="rtl"] {
-    direction: rtl;
-  }
-
-  [dir="rtl"] .sidebar {
-    right: 0;
-    left: auto;
-  }
-
-  /* Custom scrollbar */
-  ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-  }
-
-  ::-webkit-scrollbar-track {
-    @apply bg-background;
-  }
-
-  ::-webkit-scrollbar-thumb {
-    @apply bg-border rounded-full;
-  }
-
-  ::-webkit-scrollbar-thumb:hover {
-    @apply bg-muted-foreground;
-  }
-
-  /* Focus styles */
-  .focus-visible {
-    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
-  }
-
-  /* Animation utilities */
-  .animate-fade-in {
-    animation: fadeIn 0.5s ease-in-out;
-  }
-
-  .animate-slide-in {
-    animation: slideIn 0.3s ease-out;
-  }
-
-  .animate-scale-in {
-    animation: scaleIn 0.2s ease-out;
-  }
-
-  @keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-  }
-
-  @keyframes slideIn {
-    from { transform: translateX(-100%); }
-    to { transform: translateX(0); }
-  }
-
-  @keyframes scaleIn {
-    from { transform: scale(0.95); opacity: 0; }
-    to { transform: scale(1); opacity: 1; }
-  }
-
-  /* Print styles */
-  @media print {
-    .no-print {
-      display: none !important;
-    }
-  }
-
-  /* High contrast mode */
-  @media (prefers-contrast: high) {
-    :root {
-      --border: 0 0% 0%;
-      --input: 0 0% 0%;
-    }
-  }
-
-  /* Reduced motion */
-  @media (prefers-reduced-motion: reduce) {
-    *,
-    ::before,
-    ::after {
-      animation-duration: 0.01ms !important;
-      animation-iteration-count: 1 !important;
-      transition-duration: 0.01ms !important;
-      scroll-behavior: auto !important;
-    }
   }
 }
 
-/* React Big Calendar Custom Styles */
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-muted;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-border rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-muted-foreground/50;
+}
+
+/* Calendar specific styles */
 .rbc-calendar {
-  @apply bg-background text-foreground;
+  @apply bg-background;
 }
 
-.rbc-toolbar {
-  @apply mb-4;
-}
-
-.rbc-toolbar button {
-  @apply px-3 py-1 rounded-md text-sm font-medium;
-}
-
-.rbc-toolbar button:hover {
-  @apply bg-accent;
-}
-
-.rbc-toolbar button.rbc-active {
-  @apply bg-primary text-primary-foreground;
-}
-
-.rbc-month-view {
-  @apply border border-border rounded-lg;
-}
-
-.rbc-day-bg {
-  @apply border-r border-border;
-}
-
-.rbc-date-cell {
-  @apply p-2 text-sm;
-}
-
-.rbc-today {
-  @apply bg-primary/10;
+.rbc-header {
+  @apply bg-muted text-muted-foreground font-medium;
 }
 
 .rbc-event {
-  @apply bg-primary text-primary-foreground rounded-md px-2 py-1 text-xs;
+  @apply rounded border-none text-white text-xs;
 }
 
-/* Custom component styles */
-.post-preview {
-  @apply border rounded-lg p-4 bg-card;
+.rbc-selected {
+  @apply bg-primary;
 }
 
-.platform-icon {
-  @apply rounded-full flex items-center justify-center;
+.rbc-today {
+  @apply bg-accent;
 }
 
-.social-platform-facebook {
-  background-color: #1877F2;
+/* Animation utilities */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
-.social-platform-instagram {
-  background: linear-gradient(45deg, #f09433 0%,#e6683c 25%,#dc2743 50%,#cc2366 75%,#bc1888 100%);
+@keyframes slideIn {
+  from { transform: translateY(-10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
 }
 
-.social-platform-linkedin {
-  background-color: #0A66C2;
+.animate-fade-in {
+  animation: fadeIn 0.2s ease-out;
 }
 
-.social-platform-tiktok {
-  background-color: #000000;
-}
-
-.social-platform-youtube {
-  background-color: #FF0000;
+.animate-slide-in {
+  animation: slideIn 0.2s ease-out;
 }

@@ -5,7 +5,7 @@ export default {
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
-  darkMode: ['class'],
+  darkMode: ["class"],
   theme: {
     container: {
       center: true,
@@ -49,30 +49,11 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
-        // Social media brand colors
-        facebook: "#1877F2",
-        instagram: "#E4405F",
-        linkedin: "#0A66C2",
-        tiktok: "#000000",
-        youtube: "#FF0000",
-        success: "#10B981",
-        warning: "#F59E0B",
-        error: "#EF4444",
       },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
-      },
-      fontFamily: {
-        sans: ["Inter", "sans-serif"],
-      },
-      animation: {
-        "accordion-down": "accordion-down 0.2s ease-out",
-        "accordion-up": "accordion-up 0.2s ease-out",
-        "fade-in": "fadeIn 0.5s ease-in-out",
-        "slide-in": "slideIn 0.3s ease-out",
-        "scale-in": "scaleIn 0.2s ease-out",
       },
       keyframes: {
         "accordion-down": {
@@ -83,26 +64,12 @@ export default {
           from: { height: "var(--radix-accordion-content-height)" },
           to: { height: 0 },
         },
-        fadeIn: {
-          from: { opacity: 0 },
-          to: { opacity: 1 },
-        },
-        slideIn: {
-          from: { transform: "translateX(-100%)" },
-          to: { transform: "translateX(0)" },
-        },
-        scaleIn: {
-          from: { transform: "scale(0.95)", opacity: 0 },
-          to: { transform: "scale(1)", opacity: 1 },
-        },
       },
-      screens: {
-        'xs': '475px',
+      animation: {
+        "accordion-down": "accordion-down 0.2s ease-out",
+        "accordion-up": "accordion-up 0.2s ease-out",
       },
     },
   },
-  plugins: [
-    require('@tailwindcss/typography'),
-    require('@tailwindcss/forms'),
-  ],
+  plugins: [],
 }

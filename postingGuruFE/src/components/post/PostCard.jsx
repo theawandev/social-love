@@ -1,236 +1,125 @@
-// src/components/post/PostCard.jsx
+// components/posts/PostCard.jsx
 import React from 'react';
-import { Link } from 'react-router-dom';
-import {
-  MoreHorizontal,
-  Calendar,
-  Edit,
-  Copy,
-  Trash2,
-  Play,
-  Pause,
-  Eye,
-  Image as ImageIcon,
-  Video,
-  FileText
-} from 'lucide-react';
-import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import { Card, CardContent } from '@/components/ui/Card';
+import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
-import Badge from '@/components/ui/Badge';
-import { useLanguage } from '@/contexts/LanguageContext';
-import { formatDate, truncateText } from '@/utils/helpers';
-import PlatformIcon from '@/components/social/PlatformIcon';
 import StatusBadge from '@/components/common/StatusBadge';
+import PlatformIcon from '@/components/social/PlatformIcon';
+import { MoreHorizontal, Edit, Trash2, Copy, ExternalLink } from 'lucide-react';
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
+import { format } from 'date-fns';
+import { truncateText } from '@/utils/formatter';
 
-const PostCard = ({
-                    post,
-                    onEdit,
-                    onDuplicate,
-                    onDelete,
-                    onPublish,
-                    onCancel,
-                    compact = false
-                  }) => {
-  const { t } = useLanguage();
-
-  const getPostTypeIcon = (type) => {
-    switch (type) {
-      case 'image':
-      case 'carousel':
-        return ImageIcon;
-      case 'video':
-      case 'reel':
-      case 'short':
-        return Video;
-      default:
-        return FileText;
-    }
-  };
-
-  const PostTypeIcon = getPostTypeIcon(post.post_type);
-
-  const renderMediaPreview = () => {
-    if (!post.mediaFiles || post.mediaFiles.length === 0) return null;
-
-    const firstMedia = post.mediaFiles[0];
-
-    return (
-      <div className="relative w-full h-32 bg-muted rounded-lg overflow-hidden mb-3">
-        {firstMedia.file_type.startsWith('image/') ? (
-          <img
-            src={firstMedia.thumbnailPath || firstMedia.file_path}
-            alt="Post media"
-            className="w-full h-full object-cover"
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <Video className="h-8 w-8 text-muted-foreground" />
-          </div>
-        )}
-
-        {post.mediaFiles.length > 1 && (
-          <div className="absolute top-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded">
-            +{post.mediaFiles.length - 1}
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  if (compact) {
-    return (
-      <div className="flex items-center space-x-3 p-3 border rounded-lg hover:bg-accent transition-colors">
-        <div className="flex-shrink-0">
-          <PostTypeIcon className="h-5 w-5 text-muted-foreground" />
-        </div>
-
-        <div className="flex-1 min-w-0">
-          <h3 className="text-sm font-medium truncate">
-            {post.title || t('posts.untitled')}
-          </h3>
-          <p className="text-xs text-muted-foreground truncate">
-            {truncateText(post.content, 60)}
-          </p>
-        </div>
-
-        <div className="flex items-center space-x-2">
-          <StatusBadge status={post.status} />
-          <span className="text-xs text-muted-foreground">
-            {formatDate(post.scheduled_at || post.created_at, { relative: true })}
-          </span>
-        </div>
-      </div>
-    );
-  }
-
+const PostCard = ({ post, onEdit, onDelete, onDuplicate, onView }) => {
   return (
-    <Card className="group hover:shadow-md transition-all">
-      <CardContent className="p-4">
-        <div className="flex items-start justify-between mb-3">
-          <div className="flex items-center space-x-2">
-            <PostTypeIcon className="h-4 w-4 text-muted-foreground" />
+    <Card className="hover:shadow-md transition-shadow">
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between">
+          <div className="flex items-center gap-2">
             <StatusBadge status={post.status} />
-            {post.is_ai_generated && (
-              <Badge variant="secondary" className="text-xs">
-                AI
-              </Badge>
+            {post.scheduled_for && (
+              <span className="text-xs text-muted-foreground">
+                {format(new Date(post.scheduled_for), 'MMM d, h:mm a')}
+              </span>
             )}
           </div>
 
           <DropdownMenu.Root>
             <DropdownMenu.Trigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="opacity-0 group-hover:opacity-100 transition-opacity"
-              >
+              <Button variant="outline" size="sm">
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenu.Trigger>
             <DropdownMenu.Portal>
-              <DropdownMenu.Content className="min-w-[10rem] bg-popover text-popover-foreground rounded-md p-1 shadow-lg border z-50">
+              <DropdownMenu.Content className="bg-background border rounded-lg shadow-lg p-1 min-w-40">
                 <DropdownMenu.Item
-                  className="flex items-center px-2 py-1.5 text-sm cursor-pointer hover:bg-accent rounded-sm"
+                  onClick={() => onView?.(post)}
+                  className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-accent rounded cursor-pointer"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  View
+                </DropdownMenu.Item>
+                <DropdownMenu.Item
                   onClick={() => onEdit?.(post)}
+                  className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-accent rounded cursor-pointer"
                 >
-                  <Eye className="h-3 w-3 mr-2" />
-                  {t('common.view')}
+                  <Edit className="h-4 w-4" />
+                  Edit
                 </DropdownMenu.Item>
-
-                {post.status !== 'published' && (
-                  <DropdownMenu.Item
-                    className="flex items-center px-2 py-1.5 text-sm cursor-pointer hover:bg-accent rounded-sm"
-                    onClick={() => onEdit?.(post)}
-                  >
-                    <Edit className="h-3 w-3 mr-2" />
-                    {t('common.edit')}
-                  </DropdownMenu.Item>
-                )}
-
                 <DropdownMenu.Item
-                  className="flex items-center px-2 py-1.5 text-sm cursor-pointer hover:bg-accent rounded-sm"
                   onClick={() => onDuplicate?.(post)}
+                  className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-accent rounded cursor-pointer"
                 >
-                  <Copy className="h-3 w-3 mr-2" />
-                  {t('common.duplicate')}
+                  <Copy className="h-4 w-4" />
+                  Duplicate
                 </DropdownMenu.Item>
-
-                {post.status === 'scheduled' && (
-                  <>
-                    <DropdownMenu.Item
-                      className="flex items-center px-2 py-1.5 text-sm cursor-pointer hover:bg-accent rounded-sm"
-                      onClick={() => onPublish?.(post)}
-                    >
-                      <Play className="h-3 w-3 mr-2" />
-                      {t('posts.publishNow')}
-                    </DropdownMenu.Item>
-                    <DropdownMenu.Item
-                      className="flex items-center px-2 py-1.5 text-sm cursor-pointer hover:bg-accent rounded-sm"
-                      onClick={() => onCancel?.(post)}
-                    >
-                      <Pause className="h-3 w-3 mr-2" />
-                      {t('posts.cancel')}
-                    </DropdownMenu.Item>
-                  </>
-                )}
-
-                <DropdownMenu.Separator className="h-px bg-border my-1" />
-
+                <DropdownMenu.Separator className="my-1 h-px bg-border" />
                 <DropdownMenu.Item
-                  className="flex items-center px-2 py-1.5 text-sm cursor-pointer hover:bg-accent rounded-sm text-destructive"
-                  onClick={() => onDelete?.(post)}
+                  onClick={() => onDelete?.(post.id)}
+                  className="flex items-center gap-2 px-3 py-2 text-sm text-destructive hover:bg-destructive/10 rounded cursor-pointer"
                 >
-                  <Trash2 className="h-3 w-3 mr-2" />
-                  {t('common.delete')}
+                  <Trash2 className="h-4 w-4" />
+                  Delete
                 </DropdownMenu.Item>
               </DropdownMenu.Content>
             </DropdownMenu.Portal>
           </DropdownMenu.Root>
         </div>
+      </CardHeader>
 
-        {renderMediaPreview()}
-
+      <CardContent>
         <div className="space-y-3">
-          <div>
-            <h3 className="text-sm font-medium line-clamp-1">
-              {post.title || t('posts.untitled')}
-            </h3>
-            <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-              {post.content}
-            </p>
-          </div>
+          <p className="text-sm text-foreground">
+            {truncateText(post.content, 150)}
+          </p>
 
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-1">
-              {post.targets?.slice(0, 3).map((target, index) => (
+          {post.media && post.media.length > 0 && (
+            <div className="grid grid-cols-2 gap-2">
+              {post.media.slice(0, 4).map((media, index) => (
                 <div key={index} className="relative">
-                  <PlatformIcon
-                    platform={target.socialAccount?.platform}
-                    size="sm"
-                    className="h-6 w-6"
+                  <img
+                    src={media.thumbnail_url || media.url}
+                    alt={`Media ${index + 1}`}
+                    className="w-full h-20 object-cover rounded"
                   />
-                  {target.status === 'failed' && (
-                    <div className="absolute -top-1 -right-1 h-3 w-3 bg-destructive rounded-full" />
+                  {post.media.length > 4 && index === 3 && (
+                    <div className="absolute inset-0 bg-black/50 rounded flex items-center justify-center text-white text-sm font-medium">
+                      +{post.media.length - 4}
+                    </div>
                   )}
                 </div>
               ))}
-              {post.targets?.length > 3 && (
-                <div className="h-6 w-6 rounded-full bg-muted flex items-center justify-center">
-                  <span className="text-xs">+{post.targets.length - 3}</span>
-                </div>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              {post.platforms?.slice(0, 3).map((platform, index) => (
+                <PlatformIcon key={index} platform={platform} size="sm" />
+              ))}
+              {post.platforms?.length > 3 && (
+                <span className="text-xs text-muted-foreground">
+                  +{post.platforms.length - 3}
+                </span>
               )}
             </div>
 
-            <div className="text-right">
-              <div className="flex items-center text-xs text-muted-foreground">
-                <Calendar className="h-3 w-3 mr-1" />
-                {post.scheduled_at
-                  ? formatDate(post.scheduled_at, { format: 'MMM dd, HH:mm' })
-                  : formatDate(post.created_at, { format: 'MMM dd, HH:mm' })
-                }
+            {post.tags && post.tags.length > 0 && (
+              <div className="flex items-center gap-1">
+                {post.tags.slice(0, 2).map((tag, index) => (
+                  <span
+                    key={index}
+                    className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full"
+                  >
+                    #{tag}
+                  </span>
+                ))}
+                {post.tags.length > 2 && (
+                  <span className="text-xs text-muted-foreground">
+                    +{post.tags.length - 2}
+                  </span>
+                )}
               </div>
-            </div>
+            )}
           </div>
         </div>
       </CardContent>
@@ -239,4 +128,3 @@ const PostCard = ({
 };
 
 export default PostCard;
-

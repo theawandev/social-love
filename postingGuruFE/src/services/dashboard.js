@@ -10,6 +10,7 @@ export const dashboardAPI = {
     const params = new URLSearchParams({ year, month });
     return api.get(`/dashboard/events?${params}`);
   },
+  getStats: () => api.get('/dashboard/stats'),
 
   // Get queue statistics
   getQueueStats: () => api.get('/dashboard/queue-stats'),
