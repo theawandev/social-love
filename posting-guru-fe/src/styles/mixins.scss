@@ -1,0 +1,240 @@
+@import './variables';
+
+// Responsive breakpoints
+@mixin sm {
+  @media (min-width: $breakpoint-sm) {
+    @content;
+  }
+}
+
+@mixin md {
+  @media (min-width: $breakpoint-md) {
+    @content;
+  }
+}
+
+@mixin lg {
+  @media (min-width: $breakpoint-lg) {
+    @content;
+  }
+}
+
+@mixin xl {
+  @media (min-width: $breakpoint-xl) {
+    @content;
+  }
+}
+
+// Button base
+@mixin btn-base {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: $spacing-2;
+  padding: $spacing-3 $spacing-4;
+  border: none;
+  border-radius: $radius-md;
+  font-family: $font-family-base;
+  font-size: $font-size-sm;
+  font-weight: $font-weight-medium;
+  text-decoration: none;
+  cursor: pointer;
+  transition: $transition-base;
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  &:focus {
+    outline: 2px solid $primary-500;
+    outline-offset: 2px;
+  }
+}
+
+// Button variants
+@mixin btn-primary {
+  @include btn-base;
+  background-color: $primary-500;
+  color: white;
+
+  &:hover:not(:disabled) {
+    background-color: $primary-600;
+  }
+
+  &:active {
+    background-color: $primary-700;
+  }
+}
+
+@mixin btn-secondary {
+  @include btn-base;
+  background-color: $gray-100;
+  color: $gray-700;
+
+  &:hover:not(:disabled) {
+    background-color: $gray-200;
+  }
+
+  .dark & {
+    background-color: $gray-800;
+    color: $gray-200;
+
+    &:hover:not(:disabled) {
+      background-color: $gray-700;
+    }
+  }
+}
+
+@mixin btn-ghost {
+  @include btn-base;
+  background-color: transparent;
+  color: $gray-600;
+
+  &:hover:not(:disabled) {
+    background-color: $gray-100;
+  }
+
+  .dark & {
+    color: $gray-300;
+
+    &:hover:not(:disabled) {
+      background-color: $gray-800;
+    }
+  }
+}
+
+// Card component
+@mixin card {
+  background-color: var(--color-card-bg);
+  border: 1px solid var(--color-border);
+  border-radius: $radius-lg;
+  box-shadow: $shadow-sm;
+  transition: $transition-base;
+
+  &:hover {
+    box-shadow: $shadow-md;
+  }
+}
+
+// Input field
+@mixin input-field {
+  width: 100%;
+  padding: $spacing-3;
+  background-color: var(--color-input-bg);
+  border: 1px solid var(--color-border);
+  border-radius: $radius-md;
+  font-family: $font-family-base;
+  font-size: $font-size-sm;
+  color: var(--color-text-primary);
+  transition: $transition-base;
+
+  &:focus {
+    outline: none;
+    border-color: $primary-500;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  }
+
+  &::placeholder {
+    color: var(--color-text-tertiary);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+// Flexbox utilities
+@mixin flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@mixin flex-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+@mixin flex-start {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+// Text utilities
+@mixin text-ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@mixin text-clamp($lines: 3) {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: $lines;
+  overflow: hidden;
+}
+
+// Loading spinner
+@mixin spinner($size: 20px) {
+  width: $size;
+  height: $size;
+  border: 2px solid $gray-300;
+  border-top: 2px solid $primary-500;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+// Platform styling
+@mixin platform-facebook {
+  background-color: $facebook-color;
+  color: white;
+
+  &:hover {
+    background-color: darken($facebook-color, 10%);
+  }
+}
+
+@mixin platform-instagram {
+  background: linear-gradient(45deg, $instagram-color, #fd1d1d, #fcb045);
+  color: white;
+
+  &:hover {
+    opacity: 0.9;
+  }
+}
+
+@mixin platform-linkedin {
+  background-color: $linkedin-color;
+  color: white;
+
+  &:hover {
+    background-color: darken($linkedin-color, 10%);
+  }
+}
+
+@mixin platform-tiktok {
+  background-color: $tiktok-color;
+  color: white;
+
+  &:hover {
+    background-color: lighten($tiktok-color, 20%);
+  }
+}
+
+@mixin platform-youtube {
+  background-color: $youtube-color;
+  color: white;
+
+  &:hover {
+    background-color: darken($youtube-color, 10%);
+  }
+}

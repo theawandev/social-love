@@ -1,0 +1,77 @@
+{
+  "app": {
+    "name": "پوسٹنگ گرو",
+    "tagline": "اپنی سوشل میڈیا موجودگی کو خودکار بنائیں"
+  },
+  "navigation": {
+    "dashboard": "ڈیش بورڈ",
+    "posts": "پوسٹس",
+    "accounts": "اکاؤنٹس",
+    "calendar": "کیلنڈر",
+    "settings": "سیٹنگز"
+  },
+  "auth": {
+    "login": "لاگ ان",
+    "register": "رجسٹر",
+    "logout": "لاگ آؤٹ",
+    "email": "ای میل",
+    "password": "پاس ورڈ",
+    "username": "صارف نام",
+    "firstName": "پہلا نام",
+    "lastName": "آخری نام",
+    "forgotPassword": "پاس ورڈ بھول گئے؟",
+    "dontHaveAccount": "اکاؤنٹ نہیں ہے؟",
+    "alreadyHaveAccount": "پہلے سے اکاؤنٹ ہے؟",
+    "signInWithGoogle": "گوگل سے سائن ان کریں",
+    "createAccount": "اکاؤنٹ بنائیں",
+    "signIn": "سائن ان"
+  },
+  "posts": {
+    "createPost": "پوسٹ بنائیں",
+    "scheduled": "شیڈول شدہ",
+    "drafts": "ڈرافٹس",
+    "history": "تاریخ",
+    "title": "عنوان",
+    "content": "مواد",
+    "scheduleFor": "کے لیے شیڈول",
+    "publishNow": "ابھی پبلش کریں",
+    "saveDraft": "ڈرافٹ محفوظ کریں",
+    "selectPlatforms": "پلیٹ فارم منتخب کریں",
+    "addMedia": "میڈیا شامل کریں"
+  },
+  "platforms": {
+    "facebook": "فیس بک",
+    "instagram": "انسٹاگرام",
+    "linkedin": "لنکڈ ان",
+    "tiktok": "ٹک ٹاک",
+    "youtube": "یوٹیوب"
+  },
+  "common": {
+    "save": "محفوظ کریں",
+    "cancel": "منسوخ",
+    "delete": "ڈیلیٹ",
+    "edit": "ایڈٹ",
+    "loading": "لوڈ ہو رہا ہے...",
+    "error": "خرابی",
+    "success": "کامیابی",
+    "warning": "انتباہ",
+    "info": "معلومات",
+    "yes": "ہاں",
+    "no": "نہیں",
+    "close": "بند کریں",
+    "search": "تلاش",
+    "filter": "فلٹر",
+    "sort": "ترتیب",
+    "upload": "اپ لوڈ",
+    "download": "ڈاؤن لوڈ"
+  },
+  "theme": {
+    "light": "روشن",
+    "dark": "تاریک",
+    "system": "سسٹم"
+  },
+  "language": {
+    "english": "English",
+    "urdu": "اردو"
+  }
+}
